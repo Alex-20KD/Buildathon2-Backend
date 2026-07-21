@@ -41,7 +41,7 @@ En `Buildathon2-Frontend/.env.local`, configura:
 VITE_API_BASE_URL=http://localhost:8000/api
 ```
 
-En producción, reemplaza los orígenes locales por el dominio exacto de Amplify o del sitio web publicado. No uses `*` mientras `CORS_ORIGINS` se mantenga restringido.
+En producción, reemplaza los orígenes locales por el dominio exacto del frontend publicado. No uses `*` mientras `CORS_ORIGINS` se mantenga restringido.
 
 ## Probar
 

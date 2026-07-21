@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validate-and-package:
-    name: Validar y empaquetar FastAPI
+  validate:
+    name: Validar FastAPI
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -72,20 +72,6 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Crear paquete para Elastic Beanstalk
-        shell: bash
-        run: |
-          mkdir -p dist
-          zip -r dist/backend-source.zip . \
-            -x '.git/*' '.github/*' 'docs/*' 'tests/*' 'dist/*' \
-               '.pytest_cache/*' '.ruff_cache/*' '__pycache__/*' '*.pyc' \
-               'venv/*' '.venv/*' '.env' '.env.*' '*.db' \
-               'faiss_index/*' 'generated_pdfs/*'
-          files=$(unzip -Z1 dist/backend-source.zip)
-          grep -qx 'requirements.txt' <<< "$files"
-          grep -qx 'Procfile' <<< "$files"
-          grep -qx 'app/main.py' <<< "$files"
-
       - name: Guardar resultado de pruebas
         if: always()
         uses: actions/upload-artifact@v4
@@ -93,12 +79,4 @@ jobs:
           name: backend-test-results
           path: test-results/
           if-no-files-found: ignore
-          retention-days: 7
-
-      - name: Guardar paquete de despliegue
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-source
-          path: dist/backend-source.zip
-          if-no-files-found: error
           retention-days: 7
