@@ -8,6 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   id-token: write
 
@@ -33,10 +34,6 @@ jobs:
         shell: bash
         run: echo "sha=${{ github.event.workflow_run.head_sha || github.sha }}" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ steps.source.outputs.sha }}
-
       - name: Verificar configuración
         shell: bash
         run: |
@@ -48,42 +45,80 @@ jobs:
             fi
           done
 
+      - name: Descargar paquete validado por CI
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-source
+          path: bundle
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Empaquetar código para ejecución manual
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+
+      - name: Crear paquete para ejecución manual
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          mkdir -p dist
+          zip -r dist/backend-source.zip . \
+            -x '.git/*' '.github/*' 'docs/*' 'tests/*' 'dist/*' \
+               '.pytest_cache/*' '.ruff_cache/*' '__pycache__/*' '*.pyc' \
+               'venv/*' '.venv/*' '.env' '.env.*'
+
+      - name: Identificar paquete de despliegue
+        id: bundle
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT_NAME" == 'workflow_run' ]]; then
+            file='bundle/backend-source.zip'
+          else
+            file='dist/backend-source.zip'
+          fi
+          test -f "$file"
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+          echo "key=elastic-beanstalk/${{ steps.source.outputs.sha }}.zip" >> "$GITHUB_OUTPUT"
+
       - name: Autenticarse en AWS con OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Empaquetar código de la aplicación
-        id: package
-        shell: bash
-        run: |
-          package="backend-${{ steps.source.outputs.sha }}.zip"
-          zip -r "$package" . \
-            -x '.git/*' '.github/*' 'docs/*' 'node_modules/*' \
-               'venv/*' '.venv/*' '__pycache__/*' 'bin/*' 'obj/*'
-          echo "file=$package" >> "$GITHUB_OUTPUT"
-          echo "key=elastic-beanstalk/${{ steps.source.outputs.sha }}.zip" >> "$GITHUB_OUTPUT"
-
       - name: Subir paquete de la versión
         run: |
-          aws s3 cp "${{ steps.package.outputs.file }}" \
-            "s3://$DEPLOYMENT_BUCKET/${{ steps.package.outputs.key }}"
+          aws s3 cp "${{ steps.bundle.outputs.file }}" \
+            "s3://$DEPLOYMENT_BUCKET/${{ steps.bundle.outputs.key }}"
 
-      - name: Crear versión de Elastic Beanstalk
+      - name: Crear versión de Elastic Beanstalk si no existe
         env:
           VERSION_LABEL: ${{ steps.source.outputs.sha }}
-          S3_KEY: ${{ steps.package.outputs.key }}
+          S3_KEY: ${{ steps.bundle.outputs.key }}
+        shell: bash
         run: |
-          aws elasticbeanstalk create-application-version \
+          existing=$(aws elasticbeanstalk describe-application-versions \
             --application-name "$ELASTIC_BEANSTALK_APPLICATION" \
             --version-label "$VERSION_LABEL" \
-            --source-bundle "S3Bucket=$DEPLOYMENT_BUCKET,S3Key=$S3_KEY" \
-            --process
+            --query 'ApplicationVersions[0].VersionLabel' \
+            --output text)
+          if [[ "$existing" != "$VERSION_LABEL" ]]; then
+            aws elasticbeanstalk create-application-version \
+              --application-name "$ELASTIC_BEANSTALK_APPLICATION" \
+              --version-label "$VERSION_LABEL" \
+              --source-bundle "S3Bucket=$DEPLOYMENT_BUCKET,S3Key=$S3_KEY" \
+              --process
+          fi
 
       - name: Desplegar versión y esperar a que el entorno esté listo
         env:
           VERSION_LABEL: ${{ steps.source.outputs.sha }}
+        shell: bash
         run: |
           aws elasticbeanstalk update-environment \
             --environment-name "$ELASTIC_BEANSTALK_ENVIRONMENT" \
@@ -93,7 +128,10 @@ jobs:
           status=$(aws elasticbeanstalk describe-environments \
             --environment-names "$ELASTIC_BEANSTALK_ENVIRONMENT" \
             --query 'Environments[0].Health' --output text)
-          test "$status" = 'Green' || {
+          if [[ "$status" != 'Green' ]]; then
+            aws elasticbeanstalk describe-events \
+              --environment-name "$ELASTIC_BEANSTALK_ENVIRONMENT" \
+              --max-records 20
             echo "El entorno terminó con salud: $status"
             exit 1
-          }
+          fi

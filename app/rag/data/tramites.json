@@ -1,0 +1,62 @@
+[
+  {
+    "nombre": "Permiso de Funcionamiento",
+    "descripcion": "Autorización municipal referencial para que un establecimiento comercial opere en Portoviejo.",
+    "requisitos": [
+      "Copia de cédula o RUC del solicitante.",
+      "Formulario de solicitud municipal lleno.",
+      "Certificado de Uso de Suelo vigente cuando corresponda.",
+      "Comprobante de pago de la tasa municipal referencial."
+    ],
+    "costo_estimado": "USD 25,00 referencial para este MVP; el valor final se confirma en ventanilla municipal.",
+    "tiempo_estimado": "De 3 a 5 días hábiles referenciales, sujetos a revisión municipal.",
+    "palabras_clave": [
+      "permiso de funcionamiento",
+      "funcionamiento",
+      "restaurante",
+      "local comercial",
+      "establecimiento",
+      "abrir negocio"
+    ]
+  },
+  {
+    "nombre": "Patente Municipal",
+    "descripcion": "Registro municipal referencial para el ejercicio de una actividad económica en Portoviejo.",
+    "requisitos": [
+      "Copia de cédula o RUC del contribuyente.",
+      "Formulario de declaración de patente municipal lleno.",
+      "Dirección del establecimiento o domicilio de la actividad económica.",
+      "Comprobante de pago de la tasa municipal referencial."
+    ],
+    "costo_estimado": "USD 20,00 referencial para este MVP; puede variar según la actividad económica.",
+    "tiempo_estimado": "De 2 a 4 días hábiles referenciales, sujetos a revisión municipal.",
+    "palabras_clave": [
+      "patente municipal",
+      "patente",
+      "actividad economica",
+      "actividad comercial",
+      "registro de negocio",
+      "contribuyente"
+    ]
+  },
+  {
+    "nombre": "Certificado de Uso de Suelo",
+    "descripcion": "Certificación municipal referencial sobre la compatibilidad de una actividad con el uso de suelo del predio.",
+    "requisitos": [
+      "Copia de cédula del solicitante.",
+      "Formulario de solicitud de uso de suelo lleno.",
+      "Dirección exacta o croquis del predio.",
+      "Clave catastral del predio, si está disponible."
+    ],
+    "costo_estimado": "USD 15,00 referencial para este MVP; el valor final se confirma en ventanilla municipal.",
+    "tiempo_estimado": "De 3 a 5 días hábiles referenciales, sujetos a revisión técnica.",
+    "palabras_clave": [
+      "certificado de uso de suelo",
+      "uso de suelo",
+      "suelo",
+      "predio",
+      "clave catastral",
+      "zonificacion"
+    ]
+  }
+]

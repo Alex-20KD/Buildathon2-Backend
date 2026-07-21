@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+dist/
+test-results/
+*.db
+gunicorn.log
+generated_pdfs/*
+!generated_pdfs/.gitkeep
+faiss_index/*
+!faiss_index/.gitkeep
