@@ -26,6 +26,23 @@ La primera llamada a `POST /api/chat` construye `faiss_index/` usando
 `text-embedding-3-small`; las siguientes reutilizan ese índice. El servidor y el endpoint
 `/health` pueden arrancar sin la clave, pero `/api/chat` responderá `503` hasta configurarla.
 
+## Conectar el frontend
+
+El frontend Vite se comunica con esta API mediante `POST /api/chat`. Para desarrollo local:
+
+```env
+# Buildathon2-Backend/.env
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+```
+
+En `Buildathon2-Frontend/.env.local`, configura:
+
+```env
+VITE_API_BASE_URL=http://localhost:8000/api
+```
+
+En producción, reemplaza los orígenes locales por el dominio exacto de Amplify o del sitio web publicado. No uses `*` mientras `CORS_ORIGINS` se mantenga restringido.
+
 ## Probar
 
 ```bash

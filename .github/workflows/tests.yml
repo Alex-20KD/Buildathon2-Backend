@@ -1,0 +1,53 @@
+name: Tests - Backend
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Ejecutar pruebas de FastAPI
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: sqlite:///${{ runner.temp }}/portoasiste-tests.db
+      FAISS_INDEX_DIR: ${{ runner.temp }}/portoasiste-faiss-index
+      GENERATED_PDFS_DIR: ${{ runner.temp }}/portoasiste-generated-pdfs
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Instalar dependencias de prueba
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip check
+
+      - name: Ejecutar pruebas
+        run: python -m pytest -q --junitxml=test-results/pytest.xml
+
+      - name: Guardar resultados de pruebas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: test-results/pytest.xml
+          if-no-files-found: warn
+          retention-days: 7

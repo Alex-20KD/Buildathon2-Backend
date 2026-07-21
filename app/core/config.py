@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./portoasiste.db"
     faiss_index_dir: Path = PROJECT_ROOT / "faiss_index"
     generated_pdfs_dir: Path = PROJECT_ROOT / "generated_pdfs"
-    cors_origins: str = "http://localhost:3000"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000"
 
     model_config = SettingsConfigDict(
         env_file=PROJECT_ROOT / ".env",
