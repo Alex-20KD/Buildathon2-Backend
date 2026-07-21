@@ -91,8 +91,14 @@ def select_tramite(
         "vender",
         "venta",
         "negocio",
+        "local",
         "comida",
         "alimentos",
+        "encebollado",
+        "hamburguesa",
+        "hambuerguesa",
+        "puesto",
+        "carreta",
         "hot dog",
         "hotdog",
         "emprendimiento",
@@ -106,6 +112,31 @@ def select_tramite(
             ),
             None,
         )
+    return None
+
+
+def get_casual_response(message: str) -> str | None:
+    """Responde saludos breves sin enviarlos al flujo de trámites."""
+    normalized_message = normalize_text(message).strip(" ¡!¿?.,")
+
+    if normalized_message in {"hola", "buenos dias", "buenas tardes", "buenas noches"}:
+        return (
+            "¡Hola! Soy PortoAsiste IA. Puedo orientarte sobre Permiso de "
+            "Funcionamiento, Patente Municipal y Certificado de Uso de Suelo "
+            "en Portoviejo. ¿Qué negocio o trámite deseas realizar?"
+        )
+
+    if "que haces" in normalized_message or "quien eres" in normalized_message:
+        return (
+            "Soy PortoAsiste IA, tu asistente para orientarte sobre trámites "
+            "municipales en Portoviejo. Puedo ayudarte a identificar qué "
+            "necesitas para abrir un negocio, obtener una patente o verificar "
+            "el uso de suelo."
+        )
+
+    if normalized_message in {"gracias", "muchas gracias"}:
+        return "¡Con gusto! Si tienes otra consulta sobre tu negocio o trámite, aquí estoy para ayudarte."
+
     return None
 
 

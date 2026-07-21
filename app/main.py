@@ -10,7 +10,12 @@ from fastapi.responses import FileResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.chains.chat_chain import ChatChainError, get_chat_chain, select_tramite
+from app.chains.chat_chain import (
+    ChatChainError,
+    get_casual_response,
+    get_chat_chain,
+    select_tramite,
+)
 from app.core.config import get_settings
 from app.db.database import get_db, init_db
 from app.db.models import ChatHistory
@@ -57,51 +62,55 @@ def health_check() -> dict[str, str]:
 def chat(request: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
     """Responde una consulta usando solo los trámites recuperados del RAG."""
     session_id = request.session_id or str(uuid4())
+    casual_response = get_casual_response(request.message)
 
-    try:
-        retrieved_tramites = get_retriever().retrieve(request.message)
-    except MissingOpenAIKeyError as error:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="OPENAI_API_KEY no está configurada. Agrega la clave al archivo .env.",
-        ) from error
-    except Exception as error:  # pragma: no cover - protección ante proveedor externo
-        logger.exception("No fue posible inicializar el índice FAISS")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="No fue posible preparar la base de conocimiento. Intenta nuevamente.",
-        ) from error
-
-    tramite = select_tramite(request.message, retrieved_tramites)
-    if tramite is None:
-        assistant_response = (
-            "Actualmente solo puedo orientar sobre Permiso de Funcionamiento, "
-            "Patente Municipal y Certificado de Uso de Suelo del GAD de Portoviejo. "
-            "La consulta no corresponde a uno de esos trámites disponibles."
-        )
-        response = ChatResponse(response=assistant_response, session_id=session_id)
+    if casual_response is not None:
+        response = ChatResponse(response=casual_response, session_id=session_id)
     else:
         try:
-            assistant_response = get_chat_chain().answer(
-                message=request.message,
-                selected_tramite=tramite,
-                retrieved_tramites=retrieved_tramites,
-            )
-        except ChatChainError as error:
-            logger.exception("La consulta a OpenAI no pudo completarse")
+            retrieved_tramites = get_retriever().retrieve(request.message)
+        except MissingOpenAIKeyError as error:
             raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="No fue posible generar la respuesta del asistente. Intenta nuevamente.",
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="OPENAI_API_KEY no está configurada. Agrega la clave al archivo .env.",
+            ) from error
+        except Exception as error:  # pragma: no cover - protección ante proveedor externo
+            logger.exception("No fue posible inicializar el índice FAISS")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="No fue posible preparar la base de conocimiento. Intenta nuevamente.",
             ) from error
 
-        response = ChatResponse(
-            response=assistant_response,
-            tramite_detectado=tramite.nombre,
-            requisitos=tramite.requisitos,
-            costo_estimado=tramite.costo_estimado,
-            tiempo_estimado=tramite.tiempo_estimado,
-            session_id=session_id,
-        )
+        tramite = select_tramite(request.message, retrieved_tramites)
+        if tramite is None:
+            assistant_response = (
+                "Puedo orientarte sobre Permiso de Funcionamiento, Patente Municipal "
+                "y Certificado de Uso de Suelo en Portoviejo. Cuéntame qué negocio "
+                "deseas abrir o qué trámite necesitas realizar."
+            )
+            response = ChatResponse(response=assistant_response, session_id=session_id)
+        else:
+            try:
+                assistant_response = get_chat_chain().answer(
+                    message=request.message,
+                    selected_tramite=tramite,
+                    retrieved_tramites=retrieved_tramites,
+                )
+            except ChatChainError as error:
+                logger.exception("La consulta a OpenAI no pudo completarse")
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="No fue posible generar la respuesta del asistente. Intenta nuevamente.",
+                ) from error
+
+            response = ChatResponse(
+                response=assistant_response,
+                tramite_detectado=tramite.nombre,
+                requisitos=tramite.requisitos,
+                costo_estimado=tramite.costo_estimado,
+                tiempo_estimado=tramite.tiempo_estimado,
+                session_id=session_id,
+            )
 
     try:
         db.add(

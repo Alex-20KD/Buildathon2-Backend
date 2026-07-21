@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app import main
-from app.chains.chat_chain import select_tramite
+from app.chains.chat_chain import get_casual_response, select_tramite
 from app.db.database import SessionLocal
 from app.db.models import ChatHistory
 from app.rag.knowledge_base import load_tramites
@@ -76,3 +76,23 @@ def test_select_tramite_recognizes_a_food_sales_business_intent() -> None:
 
     assert selected is not None
     assert selected.nombre == "Permiso de Funcionamiento"
+
+
+def test_select_tramite_recognizes_a_food_business_by_its_name() -> None:
+    selected = select_tramite(
+        "Quisiera poner un local de encebollado en la playa",
+        [_retrieved_tramite()],
+    )
+
+    assert selected is not None
+    assert selected.nombre == "Permiso de Funcionamiento"
+
+
+def test_casual_responses_are_natural_and_do_not_require_a_tramite() -> None:
+    greeting = get_casual_response("Hola")
+    purpose = get_casual_response("¿Qué haces?")
+
+    assert greeting is not None
+    assert "¡Hola!" in greeting
+    assert purpose is not None
+    assert "Soy PortoAsiste IA" in purpose
