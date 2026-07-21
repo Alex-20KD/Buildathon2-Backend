@@ -1,0 +1,142 @@
+name: CI - Backend
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect-stack:
+    name: Detectar stack
+    runs-on: ubuntu-24.04
+    outputs:
+      stack: ${{ steps.detect.outputs.stack }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: detect
+        shell: bash
+        run: |
+          if [[ -f package.json ]]; then
+            echo 'stack=node' >> "$GITHUB_OUTPUT"
+          elif compgen -G '*.sln' >/dev/null || compgen -G '*.csproj' >/dev/null; then
+            echo 'stack=dotnet' >> "$GITHUB_OUTPUT"
+          elif [[ -f pom.xml ]]; then
+            echo 'stack=maven' >> "$GITHUB_OUTPUT"
+          elif [[ -f build.gradle || -f build.gradle.kts || -f gradlew ]]; then
+            echo 'stack=gradle' >> "$GITHUB_OUTPUT"
+          elif [[ -f pyproject.toml || -f requirements.txt ]]; then
+            echo 'stack=python' >> "$GITHUB_OUTPUT"
+          else
+            echo 'stack=unknown' >> "$GITHUB_OUTPUT"
+          fi
+
+  build-and-test:
+    name: Construir y probar
+    needs: detect-stack
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        if: needs.detect-stack.outputs.stack == 'node'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Construir Node.js
+        if: needs.detect-stack.outputs.stack == 'node'
+        shell: bash
+        run: |
+          if [[ -f package-lock.json ]]; then
+            npm ci
+            run_script() { npm run "$1"; }
+          elif [[ -f pnpm-lock.yaml ]]; then
+            corepack enable
+            pnpm install --frozen-lockfile
+            run_script() { pnpm run "$1"; }
+          elif [[ -f yarn.lock ]]; then
+            corepack enable
+            yarn install --immutable
+            run_script() { yarn run "$1"; }
+          else
+            echo 'Añade un archivo de bloqueo de dependencias.'
+            exit 1
+          fi
+          has_script() {
+            node -e "const scripts=require('./package.json').scripts || {}; process.exit(scripts['$1'] ? 0 : 1)"
+          }
+          if has_script lint; then run_script lint; fi
+          if has_script test; then run_script test; fi
+          if has_script build; then run_script build; fi
+
+      - name: Configurar .NET
+        if: needs.detect-stack.outputs.stack == 'dotnet'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Construir .NET
+        if: needs.detect-stack.outputs.stack == 'dotnet'
+        shell: bash
+        run: |
+          dotnet restore
+          dotnet test --no-restore --configuration Release
+          dotnet build --no-restore --configuration Release
+
+      - name: Configurar Java
+        if: needs.detect-stack.outputs.stack == 'maven' || needs.detect-stack.outputs.stack == 'gradle'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Construir Maven
+        if: needs.detect-stack.outputs.stack == 'maven'
+        shell: bash
+        run: |
+          if [[ -f mvnw ]]; then
+            chmod +x mvnw
+            ./mvnw --batch-mode verify
+          else
+            mvn --batch-mode verify
+          fi
+
+      - name: Construir Gradle
+        if: needs.detect-stack.outputs.stack == 'gradle'
+        shell: bash
+        run: |
+          if [[ -f gradlew ]]; then
+            chmod +x gradlew
+            ./gradlew build
+          else
+            gradle build
+          fi
+
+      - name: Configurar Python
+        if: needs.detect-stack.outputs.stack == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Construir Python
+        if: needs.detect-stack.outputs.stack == 'python'
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          if [[ -f requirements.txt ]]; then pip install -r requirements.txt; fi
+          if [[ -f pyproject.toml ]]; then pip install .; fi
+          if [[ -d tests ]]; then python -m pytest; fi
+
+      - name: Fallar si no se reconoce el stack
+        if: needs.detect-stack.outputs.stack == 'unknown'
+        run: |
+          echo 'No se encontró package.json, proyecto .NET, Maven, Gradle ni Python.'
+          echo 'Añade el código de la API o ajusta este workflow al stack definitivo.'
+          exit 1

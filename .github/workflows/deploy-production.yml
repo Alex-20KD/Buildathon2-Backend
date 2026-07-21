@@ -1,0 +1,99 @@
+name: Deploy - Backend producción
+
+on:
+  workflow_run:
+    workflows: ['CI - Backend']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: backend-production
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  ELASTIC_BEANSTALK_APPLICATION: ${{ vars.ELASTIC_BEANSTALK_APPLICATION }}
+  ELASTIC_BEANSTALK_ENVIRONMENT: ${{ vars.ELASTIC_BEANSTALK_ENVIRONMENT }}
+  DEPLOYMENT_BUCKET: ${{ vars.DEPLOYMENT_BUCKET }}
+
+jobs:
+  deploy:
+    name: Publicar en Elastic Beanstalk
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    environment: production
+    steps:
+      - name: Determinar commit a desplegar
+        id: source
+        shell: bash
+        run: echo "sha=${{ github.event.workflow_run.head_sha || github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+
+      - name: Verificar configuración
+        shell: bash
+        run: |
+          required=(ELASTIC_BEANSTALK_APPLICATION ELASTIC_BEANSTALK_ENVIRONMENT DEPLOYMENT_BUCKET)
+          for variable in "${required[@]}"; do
+            if [[ -z "${!variable}" ]]; then
+              echo "Falta la variable de GitHub: $variable"
+              exit 1
+            fi
+          done
+
+      - name: Autenticarse en AWS con OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Empaquetar código de la aplicación
+        id: package
+        shell: bash
+        run: |
+          package="backend-${{ steps.source.outputs.sha }}.zip"
+          zip -r "$package" . \
+            -x '.git/*' '.github/*' 'docs/*' 'node_modules/*' \
+               'venv/*' '.venv/*' '__pycache__/*' 'bin/*' 'obj/*'
+          echo "file=$package" >> "$GITHUB_OUTPUT"
+          echo "key=elastic-beanstalk/${{ steps.source.outputs.sha }}.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Subir paquete de la versión
+        run: |
+          aws s3 cp "${{ steps.package.outputs.file }}" \
+            "s3://$DEPLOYMENT_BUCKET/${{ steps.package.outputs.key }}"
+
+      - name: Crear versión de Elastic Beanstalk
+        env:
+          VERSION_LABEL: ${{ steps.source.outputs.sha }}
+          S3_KEY: ${{ steps.package.outputs.key }}
+        run: |
+          aws elasticbeanstalk create-application-version \
+            --application-name "$ELASTIC_BEANSTALK_APPLICATION" \
+            --version-label "$VERSION_LABEL" \
+            --source-bundle "S3Bucket=$DEPLOYMENT_BUCKET,S3Key=$S3_KEY" \
+            --process
+
+      - name: Desplegar versión y esperar a que el entorno esté listo
+        env:
+          VERSION_LABEL: ${{ steps.source.outputs.sha }}
+        run: |
+          aws elasticbeanstalk update-environment \
+            --environment-name "$ELASTIC_BEANSTALK_ENVIRONMENT" \
+            --version-label "$VERSION_LABEL"
+          aws elasticbeanstalk wait environment-updated \
+            --environment-names "$ELASTIC_BEANSTALK_ENVIRONMENT"
+          status=$(aws elasticbeanstalk describe-environments \
+            --environment-names "$ELASTIC_BEANSTALK_ENVIRONMENT" \
+            --query 'Environments[0].Health' --output text)
+          test "$status" = 'Green' || {
+            echo "El entorno terminó con salud: $status"
+            exit 1
+          }
