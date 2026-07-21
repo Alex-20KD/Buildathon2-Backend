@@ -20,9 +20,10 @@ def test_health_check_returns_ok() -> None:
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
+        "https://buildathon2-frontend.vercel.app",
     ],
 )
-def test_cors_allows_local_frontend(origin: str) -> None:
+def test_cors_allows_configured_frontend(origin: str) -> None:
     with TestClient(app) as client:
         response = client.options(
             "/api/chat",

@@ -1,4 +1,4 @@
-"""Motor y sesión SQLAlchemy para SQLite, sin migraciones."""
+"""Motor y sesión SQLAlchemy para SQLite o PostgreSQL de Supabase."""
 
 from collections.abc import Generator
 
@@ -8,8 +8,12 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from app.core.config import get_settings
 
 settings = get_settings()
-connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
-engine = create_engine(settings.database_url, connect_args=connect_args)
+is_sqlite = settings.sqlalchemy_database_url.startswith("sqlite")
+engine_options = {"connect_args": {"check_same_thread": False}} if is_sqlite else {
+    "pool_pre_ping": True,
+    "pool_recycle": 1800,
+}
+engine = create_engine(settings.sqlalchemy_database_url, **engine_options)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
