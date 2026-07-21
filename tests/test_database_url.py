@@ -22,3 +22,9 @@ def test_existing_ssl_option_is_preserved() -> None:
 
 def test_sqlite_url_is_unchanged() -> None:
     assert normalize_database_url("sqlite:///./portoasiste.db") == "sqlite:///./portoasiste.db"
+
+
+def test_incomplete_supabase_template_falls_back_to_sqlite() -> None:
+    database_url = "postgresql://postgres:TU_PASSWORD_URL_ENCODED@db.TU_PROJECT_REF.supabase.co:5432/postgres"
+
+    assert normalize_database_url(database_url) == "sqlite:///./portoasiste.db"

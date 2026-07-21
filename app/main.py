@@ -4,11 +4,10 @@ import logging
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
 
 from app.chains.chat_chain import (
     ChatChainError,
@@ -17,7 +16,7 @@ from app.chains.chat_chain import (
     select_tramite,
 )
 from app.core.config import get_settings
-from app.db.database import get_db, init_db
+from app.db.database import SessionLocal, init_db
 from app.db.models import ChatHistory
 from app.rag.knowledge_base import find_tramite, load_tramites
 from app.rag.vector_store import MissingOpenAIKeyError, get_retriever
@@ -30,9 +29,15 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """Crea la tabla de historial y los directorios de trabajo al iniciar."""
+    """Prepara directorios y el historial, sin bloquear el agente si la BD falla."""
     settings.ensure_runtime_directories()
-    init_db()
+    try:
+        init_db()
+    except SQLAlchemyError:
+        app.state.history_enabled = False
+        logger.exception("El historial no estÃ¡ disponible; el asistente continuarÃ¡ sin persistencia")
+    else:
+        app.state.history_enabled = True
     yield
 
 
@@ -58,8 +63,37 @@ def health_check() -> dict[str, str]:
     return {"status": "ok"}
 
 
+def persist_chat_history(session_id: str, user_message: str, assistant_response: str) -> None:
+    """Guarda historial solo cuando la base estÃ¡ disponible, sin bloquear el agente."""
+    if not getattr(app.state, "history_enabled", True):
+        return
+
+    database = None
+    try:
+        database = SessionLocal()
+        database.add(
+            ChatHistory(
+                session_id=session_id,
+                user_message=user_message,
+                assistant_response=assistant_response,
+            )
+        )
+        database.commit()
+    except SQLAlchemyError:
+        if database is not None:
+            try:
+                database.rollback()
+            except SQLAlchemyError:
+                pass
+        app.state.history_enabled = False
+        logger.exception("No fue posible guardar el historial; se entregarÃ¡ la respuesta del asistente")
+    finally:
+        if database is not None:
+            database.close()
+
+
 @app.post("/api/chat", response_model=ChatResponse)
-def chat(request: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
+def chat(request: ChatRequest) -> ChatResponse:
     """Responde una consulta usando solo los trámites recuperados del RAG."""
     session_id = request.session_id or str(uuid4())
     casual_response = get_casual_response(request.message)
@@ -112,22 +146,11 @@ def chat(request: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
                 session_id=session_id,
             )
 
-    try:
-        db.add(
-            ChatHistory(
-                session_id=session_id,
-                user_message=request.message,
-                assistant_response=response.response,
-            )
-        )
-        db.commit()
-    except SQLAlchemyError as error:
-        db.rollback()
-        logger.exception("No fue posible guardar el historial de chat")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="No fue posible guardar el historial de la consulta.",
-        ) from error
+    persist_chat_history(
+        session_id=session_id,
+        user_message=request.message,
+        assistant_response=response.response,
+    )
 
     return response
 

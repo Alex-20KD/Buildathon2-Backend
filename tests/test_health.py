@@ -2,7 +2,9 @@
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import SQLAlchemyError
 
+from app import main
 from app.main import app
 
 
@@ -12,6 +14,19 @@ def test_health_check_returns_ok() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_health_starts_when_history_database_is_unavailable(monkeypatch) -> None:
+    def unavailable_database() -> None:
+        raise SQLAlchemyError("Base de datos no disponible")
+
+    monkeypatch.setattr(main, "init_db", unavailable_database)
+
+    with TestClient(app) as client:
+        response = client.get("/health")
+
+    assert response.status_code == 200
+    assert app.state.history_enabled is False
 
 
 @pytest.mark.parametrize(

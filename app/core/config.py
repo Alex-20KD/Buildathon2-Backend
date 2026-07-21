@@ -1,11 +1,19 @@
 """Configuración centralizada leída desde variables de entorno y .env."""
 
+import logging
 from functools import lru_cache
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+logger = logging.getLogger(__name__)
+
+_DATABASE_URL_TEMPLATE_MARKERS = (
+    "TU_PROJECT_REF",
+    "TU_PASSWORD_URL_ENCODED",
+    "TU_CONTRASENA",
+)
 
 
 def normalize_database_url(database_url: str) -> str:
@@ -16,6 +24,12 @@ def normalize_database_url(database_url: str) -> str:
     conexiones directas de Supabase deben viajar cifradas, por eso se agrega
     ``sslmode=require`` cuando no fue especificado.
     """
+    if any(marker in database_url for marker in _DATABASE_URL_TEMPLATE_MARKERS):
+        logger.warning(
+            "DATABASE_URL contiene un marcador de ejemplo de Supabase; se usarÃ¡ SQLite temporalmente."
+        )
+        return "sqlite:///./portoasiste.db"
+
     if database_url.startswith("postgres://"):
         database_url = "postgresql://" + database_url.removeprefix("postgres://")
 

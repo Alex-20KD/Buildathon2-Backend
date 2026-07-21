@@ -58,6 +58,21 @@ VITE_API_BASE_URL=http://localhost:8000/api
 
 En producción, configura `CORS_ORIGINS` como variable de entorno en el servicio del backend e incluye el dominio exacto del frontend publicado. Para la instancia actual es `https://buildathon2-frontend.vercel.app`. No uses `*` mientras `CORS_ORIGINS` se mantenga restringido. Después de guardarla, reinicia o vuelve a desplegar el backend.
 
+## Configurar OpenAI en Render
+
+El endpoint `POST /api/chat` usa OpenAI para crear los embeddings del RAG y generar la respuesta. En el servicio de Render abre **Environment** y agrega estas variables; la clave solo debe existir en Render, nunca en Vercel ni en Git:
+
+```env
+OPENAI_API_KEY=tu_clave_nueva_de_openai
+OPENAI_CHAT_MODEL=gpt-4o-mini
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+CORS_ORIGINS=https://buildathon2-frontend.vercel.app
+```
+
+Guarda los cambios y ejecuta un nuevo despliegue del backend. Sin `OPENAI_API_KEY`, la API responde `503` de forma intencional porque no puede generar embeddings ni consultar el modelo. Si la base de datos no estÃ¡ disponible, el agente sigue respondiendo y omite el historial de esa consulta.
+
+No copies marcadores como `TU_PROJECT_REF` o `TU_PASSWORD_URL_ENCODED` a Render: no son valores vÃ¡lidos. Mientras el marcador permanezca, el backend usa SQLite temporalmente para poder iniciar, pero el historial no serÃ¡ persistente entre despliegues.
+
 ## Probar
 
 ```bash
