@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app import main
+from app.chains.chat_chain import select_tramite
 from app.db.database import SessionLocal
 from app.db.models import ChatHistory
 from app.rag.knowledge_base import load_tramites
@@ -65,3 +66,13 @@ def test_chat_reports_missing_openai_configuration(monkeypatch) -> None:
 
     assert response.status_code == 503
     assert "OPENAI_API_KEY" in response.json()["detail"]
+
+
+def test_select_tramite_recognizes_a_food_sales_business_intent() -> None:
+    selected = select_tramite(
+        "Quisiera vender hotdogs y no sé qué hacer",
+        [_retrieved_tramite()],
+    )
+
+    assert selected is not None
+    assert selected.nombre == "Permiso de Funcionamiento"

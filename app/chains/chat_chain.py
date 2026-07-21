@@ -17,6 +17,14 @@ indícalo de manera explícita. Escribe en español, con un tono formal y cercan
 
 Organiza siempre tu respuesta con estos encabezados:
 Trámite identificado, Requisitos, Costo estimado y Tiempo estimado.
+
+Cuando la consulta trate de abrir un negocio o vender alimentos, explica que el
+Permiso de Funcionamiento requiere validar el Certificado de Uso de Suelo cuando
+corresponda. Si la actividad no es compatible con el predio indicado, agrega el
+encabezado "Alternativas si no es compatible". Indica que no debe operar allí
+con esa actividad y que puede consultar al municipio por otro predio o una
+actividad compatible. No inventes zonas, direcciones, actividades permitidas ni
+autorizaciones que no consten en el contexto.
 """.strip()
 
 
@@ -75,6 +83,29 @@ def select_tramite(
         terms = [tramite.nombre, *tramite.palabras_clave]
         if any(normalize_text(term) in normalized_message for term in terms):
             return tramite
+
+    # Algunas consultas ciudadanas describen el negocio sin nombrar el trámite.
+    # Se las asocia al permiso de funcionamiento, que es el punto de partida para
+    # operar un establecimiento; el modelo después orienta sobre uso de suelo.
+    business_intent_terms = (
+        "vender",
+        "venta",
+        "negocio",
+        "comida",
+        "alimentos",
+        "hot dog",
+        "hotdog",
+        "emprendimiento",
+    )
+    if any(term in normalized_message for term in business_intent_terms):
+        return next(
+            (
+                tramite
+                for tramite in retrieved_tramites
+                if normalize_text(tramite.nombre) == "permiso de funcionamiento"
+            ),
+            None,
+        )
     return None
 
 
